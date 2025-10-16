@@ -19,17 +19,21 @@ private:
     const int total_mugs_;
     const int total_taps_;
 
+    std::atomic<int> current_mugs_available_;
     std::mutex io_mutex_;
 
 public:
     Pub(int mugs_number, int taps_number)
-        : mugs_(mugs_number), taps_(taps_number), total_mugs_(mugs_number), total_taps_(taps_number) {}
+        : mugs_(mugs_number), taps_(taps_number),
+          total_mugs_(mugs_number), total_taps_(taps_number),
+          current_mugs_available_(mugs_number) {}
 
     void drink(int customer_id, int drinks_required) {
         for (int i = 0; i < drinks_required; ++i) {
             
             // Step 1
             mugs_.acquire();
+            --current_mugs_available_;
             log(std::format("Customer {} takes a mug.", customer_id));
             
             // Step 2
@@ -44,6 +48,7 @@ public:
 
             // Step 4
             mugs_.release();
+            ++current_mugs_available_;
             log(std::format("Customer {} puts down the mug.", customer_id));
         }
         log(std::format("Customer {} leaves the pub.", customer_id));
@@ -54,9 +59,22 @@ public:
         std::cout << message << std::endl;
     }
 
-    void close_pub() {
+    void verify_and_close_pub(int initial_mugs, int final_mugs) {
         std::scoped_lock lock(io_mutex_);
-        std::cout << "\nThe pub closed!\n";
+        
+        if (final_mugs != initial_mugs) {
+            std::cout << std::format("\nERROR: Mug count mismatch! Start: {}, End: {}\n", initial_mugs, final_mugs);
+        } else {
+            std::cout << std::format("\nAll mugs returned properly: {} mugs.\n", final_mugs);
+        }
+    }
+
+    int mugs_remaining() const {
+        return current_mugs_available_.load();
+    }
+
+    int total_mugs() const {
+        return total_mugs_;
     }
 };
 
@@ -82,19 +100,13 @@ int main() {
     const int mugs_number = 4;
     const int taps_number = 2;
     const int drinks_per_customer = 3;
-    
-    /*std::cout << "Customers number: ";
-    std::cin >> customers_number;
-
-    std::cout << "Mugs number: ";
-    std::cin >> mugs_number;
-    
-    std::cout << "Taps number: ";
-    std::cin >> taps_number;*/
-
-    std::cout << std::format("Customers: {}, Mugs: {}, Taps: {}\n\n", customers_number, mugs_number, taps_number);
 
     Pub pub(mugs_number, taps_number);
+
+    int initial_mugs = pub.total_mugs();
+    int final_mugs = pub.mugs_remaining();
+
+    std::cout << std::format("Customers: {}, Mugs: {}, Taps: {}\n\n", customers_number, mugs_number, taps_number);
 
     std::vector<std::jthread> customers;
     for (int i = 0; i < customers_number; ++i) {
@@ -102,7 +114,8 @@ int main() {
     }
 
     customers.clear();
-    pub.close_pub();
+
+    pub.verify_and_close_pub(initial_mugs, final_mugs);
 
     return 0;
 }
