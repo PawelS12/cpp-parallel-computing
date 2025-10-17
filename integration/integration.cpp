@@ -1,12 +1,11 @@
 #include <iostream>
 #include <vector>
 #include <thread>
-#include <future>
-#include <cmath>
-#include <format>
 #include <atomic>
 #include <numeric>
+#include <cmath>
 #include <chrono>
+#include <format>
 
 constexpr double PI = 3.14159265358979323846;
 
@@ -19,11 +18,10 @@ struct IntegralTask {
     int N;
 
     IntegralTask(double start, double end, double delta)
-        : xp(start), xk(end), dx(delta)
+        : xp(start), xk(end)
     {
-        N = static_cast<int>(std::ceil((xk - xp) / dx));
+        N = static_cast<int>(std::ceil((xk - xp) / delta));
         dx = (xk - xp) / N;
-        std::cout << std::format("Creating task: xp = {} xk = {}, N = {}, dx = {}\n", xp, xk, N, dx);
     }
 
     double compute() const {
@@ -33,7 +31,6 @@ struct IntegralTask {
             double x2 = x1 + dx;
             sum += (f_sin(x1) + f_sin(x2)) / 2.0 * dx;
         }
-        std::cout << std::format("Partial integral: {}\n", sum);
         return sum;
     }
 
@@ -72,17 +69,21 @@ int main() {
     int numThreads = std::thread::hardware_concurrency(); 
     int numTasks = 30; 
 
+    // Sequential
     auto startSeq = std::chrono::high_resolution_clock::now();
     IntegralTask seqTask(xp, xk, dx);
     double seqResult = seqTask.compute();
     auto endSeq = std::chrono::high_resolution_clock::now();
     auto durationSeq = std::chrono::duration_cast<std::chrono::milliseconds>(endSeq - startSeq).count();
+
     std::cout << std::format("Sequential integral: {} (Time: {} ms)\n\n", seqResult, durationSeq);
 
+    // Parallel
     auto startPar = std::chrono::high_resolution_clock::now();
     double parallelResult = parallelIntegral(xp, xk, dx, numThreads, numTasks);
     auto endPar = std::chrono::high_resolution_clock::now();
     auto durationPar = std::chrono::duration_cast<std::chrono::milliseconds>(endPar - startPar).count();
+
     std::cout << std::format("Parallel integral: {} (Time: {} ms)\n", parallelResult, durationPar);
 
     return 0;
