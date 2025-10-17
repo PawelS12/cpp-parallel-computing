@@ -10,9 +10,9 @@
 
 class Pub {
 private:
-    static constexpr int MUG_MAX_ = 100;
+    static constexpr int mug_max_ = 100;
 
-    std::counting_semaphore<MUG_MAX_> mugs_;
+    std::counting_semaphore<mug_max_> mugs_;
     std::vector<std::unique_ptr<std::binary_semaphore>> taps_;
 
     const int total_mugs_;
@@ -125,12 +125,12 @@ int main() {
 
     std::cout << std::format("Customers: {}, Mugs: {}, Taps: {}\n\n", customers_number, mugs_number, taps_number);
 
-    std::vector<std::jthread> customer_threads;
-    for (int i = 0; i < customers_number; ++i) {
-        customer_threads.emplace_back(Customer(i, pub, drinks_per_customer));
+    {
+        std::vector<std::jthread> customer_threads;
+        for (int i = 0; i < customers_number; ++i) {
+            customer_threads.emplace_back(Customer(i, pub, drinks_per_customer));
+        }
     }
-
-    customer_threads.clear();
 
     int final_mugs = pub.mugs_remaining();
     pub.verify_and_close_pub(initial_mugs, final_mugs);
