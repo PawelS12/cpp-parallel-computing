@@ -123,6 +123,7 @@ int main() {
     double xp = 0.0;
     double xk = PI;
     double dx = 0.00001;
+    
     int threads_number = std::thread::hardware_concurrency(); 
     int tasks_number = 30;
 

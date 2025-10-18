@@ -1,4 +1,4 @@
 *.exe
 /.vscode/
 /example/
-
+/readers_writers/rw
