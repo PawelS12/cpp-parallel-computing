@@ -24,6 +24,10 @@ public:
             x_[i] = static_cast<double>(n_ - i);
         }
     }
+    
+
+    // ---------------------------------------------------------------------
+    // sekwencyjnie row-major 
 
     void multiply_row_sequential() {
         for (int i = 0; i < n_; ++i) {
@@ -34,6 +38,23 @@ public:
         }
     }
 
+    // alternatywna wersja z std::transform_reduce
+    void multiply_row_sequential_stdtransform() {
+        for (int i = 0; i < n_; ++i) {
+            y_[i] = std::transform_reduce(
+                std::execution::unseq,
+                a_.begin() + n_ * i,
+                a_.begin() + n_ * (i + 1),
+                x_.begin(),
+                0.0
+            );
+        }
+    }
+
+    
+    // ---------------------------------------------------------------------
+    // sekwencyjnie column-major 
+
     void multiply_col_sequential() {
         std::fill(y_.begin(), y_.end(), 0.0);
         for (int j = 0; j < n_; ++j) {
@@ -43,6 +64,9 @@ public:
         }
     }
 
+
+    // ---------------------------------------------------------------------
+    // równolegle row-major, dekompozycja wierszowa
     void mat_vec_row_row_decomp() {
         std::for_each(std::execution::par, y_.begin(), y_.end(),
             [&](double &yi) {
@@ -54,6 +78,25 @@ public:
                 yi = sum;
             });
     }
+
+    // alternatywna wersja z std::transform_reduce
+    void mat_vec_row_row_decomp_stdtransform() {
+        std::for_each(std::execution::par, std::begin(y_), std::end(y_),
+            [&](double &yi) {
+                int i = static_cast<int>(&yi - &y_[0]);
+                yi = std::transform_reduce(
+                    std::execution::unseq,
+                    a_.begin() + n_ * i,
+                    a_.begin() + n_ * (i + 1),
+                    x_.begin(),
+                    0.0
+                );
+            });
+    }
+
+
+    // ---------------------------------------------------------------------
+    // równolegle row-major, dekompozycja kolumnowa
 
     void mat_vec_row_col_decomp() {
         std::fill(y_.begin(), y_.end(), 0.0);
@@ -69,6 +112,26 @@ public:
             });
     }
 
+    // alternatywna wersja z std::transform_reduce
+    void mat_vec_row_col_decomp_stdtransform() {
+        std::fill(y_.begin(), y_.end(), 0.0);
+        std::for_each(std::execution::par, std::begin(y_), std::end(y_),
+            [&](double &yi) {
+                int i = static_cast<int>(&yi - &y_[0]);
+                yi = std::transform_reduce(
+                    std::execution::unseq,
+                    a_.begin() + n_ * i,
+                    a_.begin() + n_ * (i + 1),
+                    x_.begin(),
+                    0.0
+                );
+            });
+    }
+
+
+    // ---------------------------------------------------------------------
+    // równolegle column-major, dekompozycja wierszowa
+
     void mat_vec_col_row_decomp() {
         std::for_each(std::execution::par, y_.begin(), y_.end(),
             [&](double &yi) {
@@ -80,6 +143,10 @@ public:
                 yi = sum;
             });
     }
+
+
+    // ---------------------------------------------------------------------
+    // równolegle column-major, dekompozycja kolumnowa
 
     void mat_vec_col_col_decomp() {
         std::fill(y_.begin(), y_.end(), 0.0);
@@ -94,6 +161,7 @@ public:
                 yi = sum;
             });
     }
+
 
     void set_reference(bool column_major = false) {
         if (column_major) {
@@ -148,6 +216,10 @@ int main() {
     std::cout << "\nROW MAJOR:\n";
     mv.benchmark("Row-row decomposition", &MatrixVector::mat_vec_row_row_decomp);
     mv.benchmark("Row-col decomposition", &MatrixVector::mat_vec_row_col_decomp);
+
+    std::cout << "\nROW MAJOR (std::transform_reduce):\n";
+    mv.benchmark("Row-row decomposition (std::transform)", &MatrixVector::mat_vec_row_row_decomp_stdtransform);
+    mv.benchmark("Row-col decomposition (std::transform)", &MatrixVector::mat_vec_row_col_decomp_stdtransform);
 
     std::cout << "\nCOLUMN MAJOR:\n";
     mv.benchmark("Col-col decomposition", &MatrixVector::mat_vec_col_col_decomp, true);

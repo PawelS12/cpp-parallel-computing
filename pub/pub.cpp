@@ -1,5 +1,3 @@
-// https://en.cppreference.com/w/cpp/thread/counting_semaphore.html - semaphore
-
 #include <semaphore>
 #include <iostream>
 #include <thread>
