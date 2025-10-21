@@ -2,3 +2,5 @@
 /.vscode/
 /example/
 /readers_writers/rw
+/matrix_vector/mv
+/matrix_vector/mv_ex
