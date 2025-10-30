@@ -9,13 +9,16 @@
 
 class Pub {
 private:
-    static constexpr int mug_max_ = 100; 
-    const int total_mugs_;
-    const int total_taps_;
+    
+    const int total_mugs_; 
+    const int total_taps_; 
 
-    std::vector<std::unique_ptr<std::binary_semaphore>> taps_;
+    std::vector<std::unique_ptr<std::binary_semaphore>> taps_; 
     std::atomic<int> current_mugs_available_;
+
+    static constexpr int mug_max_ = 100; 
     std::counting_semaphore<mug_max_> mugs_;
+
     std::mutex io_mutex_;
 
 public:
@@ -34,12 +37,12 @@ public:
     void drink(int customer_id, int drinks_required) {
         for (int i = 0; i < drinks_required; ++i) {
             
-            // Step 1
+            // Krok 1
             mugs_.acquire();
             --current_mugs_available_;
             log(std::format("Customer {} takes a mug.", customer_id));
             
-            // Step 2
+            // Krok 2
             int used_tap = -1;
             while (used_tap == -1) {
                 
@@ -59,11 +62,11 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
             taps_[used_tap]->release();
 
-            // Step 3
+            // Krok 3
             log(std::format("Customer {} is drinking.", customer_id));
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-            // Step 4
+            // Krok 4
             mugs_.release();
             ++current_mugs_available_;
             log(std::format("Customer {} puts down the mug.", customer_id));
@@ -76,11 +79,11 @@ public:
         std::cout << message << std::endl;
     }
 
-    void verify_and_close_pub(int initial_mugs, int final_mugs) {    
-        if (final_mugs != initial_mugs) {
-            log(std::format("\nERROR: Mug count mismatch! Start: {}, End: {}\n", initial_mugs, final_mugs));
+    void verify_and_close_pub(int initial_mugs_number, int final_mugs_number) {    
+        if (final_mugs_number == initial_mugs_number) {
+            log(std::format("\nSUCCESS: All mugs returned properly! Start: {}, End: {}.\n", initial_mugs_number, final_mugs_number));
         } else {
-            log(std::format("\nSUCCESS: All mugs returned properly! Start: {}, End: {}.\n", initial_mugs, final_mugs));
+            log(std::format("\nERROR: Mug count mismatch! Start: {}, End: {}\n", initial_mugs_number, final_mugs_number));
         }
     }
 
@@ -97,8 +100,8 @@ public:
 class Customer {
 private:
     int customer_id_;
-    Pub& pub_;
-    int drinks_required_;
+    Pub& pub_; 
+    int drinks_required_; 
 
 public:
     Customer(int id, Pub& pub, int drinks_required) 
@@ -111,14 +114,14 @@ public:
 
 
 int main() {
-    const int customers_number = 12;
-    const int mugs_number = 4;
-    const int taps_number = 2;
-    const int drinks_per_customer = 3;
+    const int customers_number = 12; 
+    const int mugs_number = 4;         
+    const int taps_number = 2;       
+    const int drinks_per_customer = 3;  
 
-    Pub pub(mugs_number, taps_number);
+    Pub pub(mugs_number, taps_number);  
 
-    int initial_mugs = pub.total_mugs();
+    int initial_mugs_number = pub.total_mugs();
 
     std::cout << std::format("Customers: {}, Mugs: {}, Taps: {}\n\n", customers_number, mugs_number, taps_number);
 
@@ -129,8 +132,8 @@ int main() {
         }
     }
 
-    int final_mugs = pub.mugs_remaining();
-    pub.verify_and_close_pub(initial_mugs, final_mugs);
+    int final_mugs_number = pub.mugs_remaining();
+    pub.verify_and_close_pub(initial_mugs_number, final_mugs_number);
 
     return 0;
 }
