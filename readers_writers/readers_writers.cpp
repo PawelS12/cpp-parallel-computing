@@ -125,18 +125,18 @@ public:
 
 int main() {
     Library library;
-    int readersNumber = 5;
-    int writersNumber = 2;
+    int readers_number = 5;
+    int writers_number = 2;
 
     {
         std::vector<std::jthread> readers_threads;
         std::vector<std::jthread> writers_threads;
 
-        for (int i = 0; i < readersNumber; ++i) {
+        for (int i = 0; i < readers_number; ++i) {
             readers_threads.emplace_back(Reader(i, library));
         }
 
-        for (int i = 0; i < writersNumber; ++i) {
+        for (int i = 0; i < writers_number; ++i) {
             writers_threads.emplace_back(Writer(i, library));
         }
 

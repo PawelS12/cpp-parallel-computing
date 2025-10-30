@@ -4,3 +4,5 @@
 /readers_writers/rw
 /matrix_vector/mv
 /matrix_vector/mv_ex
+/pub/pub
+/pub/pub_doc.cpp

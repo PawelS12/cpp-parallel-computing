@@ -6,17 +6,16 @@
 #include <mutex>
 #include <format>
 
+
 class Pub {
 private:
-    static constexpr int mug_max_ = 100;
-
-    std::counting_semaphore<mug_max_> mugs_;
-    std::vector<std::unique_ptr<std::binary_semaphore>> taps_;
-
+    static constexpr int mug_max_ = 100; 
     const int total_mugs_;
     const int total_taps_;
 
+    std::vector<std::unique_ptr<std::binary_semaphore>> taps_;
     std::atomic<int> current_mugs_available_;
+    std::counting_semaphore<mug_max_> mugs_;
     std::mutex io_mutex_;
 
 public:
@@ -56,7 +55,7 @@ public:
                 }
             }
 
-            log(std::format("Customer {} pours a beer from tap #{}", customer_id, used_tap));
+            log(std::format("Customer {} pours a beer from tap {}", customer_id, used_tap));
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
             taps_[used_tap]->release();
 
