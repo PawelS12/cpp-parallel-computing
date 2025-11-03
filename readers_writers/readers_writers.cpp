@@ -76,6 +76,58 @@ public:
         std::scoped_lock lock(io_mutex_);
         std::cout << message << std::endl;
     }
+
+    void summary() {
+        log("\n--- Simulation completed ---");
+        log("Final state:");
+        log("  Active readers: " + std::to_string(readers_));
+        log("  Active writers: " + std::to_string(writers_));
+        log("  Waiting writers: " + std::to_string(waiting_writers_));
+
+        if (readers_ == 0 && writers_ == 0) {
+            log("All threads have terminated.");
+        } else {
+            log("Some threads are still active.");
+        }
+    }
+
+    void simulate(int readers_number, int writers_number, int duration_time) {
+        std::vector<std::jthread> readers_threads;
+        std::vector<std::jthread> writers_threads;
+
+        for (int i = 0; i < readers_number; ++i) {
+            readers_threads.emplace_back(Reader(i, *this));
+        }
+        
+        for (int i = 0; i < writers_number; ++i) {
+            writers_threads.emplace_back(Writer(i, *this));
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(duration_time));
+
+        for (auto& t : readers_threads) {
+            t.request_stop();
+        }
+
+        for (auto& t : writers_threads) {
+            t.request_stop();
+        }
+
+        /* można też użyć wspólnego tokena stopu, który przekazuje sie do wszystkich wątków, ale w tym przypadku jest to nadmiarowe
+
+        std::stop_source stop_source;
+        std::stop_token token = stop_source.get_token();
+
+        for (int i = 0; i < readers_number; ++i) {
+            readers_threads.emplace_back(Reader(i, library), token);
+        }
+
+        for (int i = 0; i < writers_number; ++i) {
+            writers_threads.emplace_back(Writer(i, library), token);
+        } */
+
+        summary();
+    }
 };
 
 
@@ -127,31 +179,9 @@ int main() {
     Library library;
     int readers_number = 5;
     int writers_number = 2;
-
-    {
-        std::vector<std::jthread> readers_threads;
-        std::vector<std::jthread> writers_threads;
-
-        for (int i = 0; i < readers_number; ++i) {
-            readers_threads.emplace_back(Reader(i, library));
-        }
-
-        for (int i = 0; i < writers_number; ++i) {
-            writers_threads.emplace_back(Writer(i, library));
-        }
-
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-
-        for (auto& t : readers_threads) {
-            t.request_stop();
-        }
-
-        for (auto& t : writers_threads) {
-            t.request_stop();
-        }
-    }
-
-    std::cout << "--- Simulation completed ---\n";
-
+    int duration_time = 10;
+    
+    library.simulate(readers_number, writers_number, duration_time); 
+    
     return 0;
 }
