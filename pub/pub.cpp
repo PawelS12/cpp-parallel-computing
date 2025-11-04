@@ -28,7 +28,7 @@ private:
     // automatycznie blokuje wątki gdy liczba zasobu jest równa 0
     std::counting_semaphore<mug_max_> mugs_;
 
-    // mutex do ochrony wypisywania stanu klientów itp.
+    // mutex do logów
     std::mutex io_mutex_;
 
 public:
@@ -92,6 +92,7 @@ public:
             ++current_mugs_available_;
             log(std::format("Customer {} puts down the mug.", customer_id));
         }
+
         log(std::format("Customer {} leaves the pub.", customer_id));
     }
 
@@ -119,6 +120,7 @@ public:
         return total_mugs_;
     }
 
+    // deklaracja funkcji symulacji pubu
     void simulate(int customers_number, int drinks_per_customer); 
 };
 
@@ -144,7 +146,7 @@ public:
 void Pub::simulate(int customers_number, int drinks_per_customer) {
     int initial_mugs_number = total_mugs_;
 
-    // blok {} powoduje, że wektor wątków automatycznie zostanie zniszczony po zakończeniu wątków
+    // Po wyjściu z bloku {} wektor zostanie zniszczony, a destruktory std::jthread automatycznie wykonają join().
     // std::jthread (c++ 20) joining thread:
     //   - automatyczny join() w destruktorze
     //   - możliwośc wywołania stop_token, który powoduje zatrzymanie wątku w dowolnym momencie
@@ -172,6 +174,7 @@ int main() {
     // początkowy stan pubu
     std::cout << std::format("Customers: {}, Mugs: {}, Taps: {}\n\n", customers_number, mugs_number, taps_number);
 
+    // symulacja
     pub.simulate(customers_number, drinks_per_customer);
 
     return 0;
