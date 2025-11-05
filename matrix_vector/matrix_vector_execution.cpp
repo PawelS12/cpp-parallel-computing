@@ -9,14 +9,18 @@
 
 class MatrixVector {
 private:
-    int n_;
-    int total_size_;
-    std::vector<double> a_, x_, y_, z_;
+    int n_; // rozmiar macierzy 
+    int total_size_; // liczba elementów macierzy
+    std::vector<double> a_; // wektor macierzy
+    std::vector<double> x_; // wektor wejściowy
+    std::vector<double> y_; // wektor wynikowy
+    std::vector<double> z_; // wektor do wyników
 
 public:
     explicit MatrixVector(int n)
         : n_(n), total_size_(n * n), a_(total_size_), x_(n), y_(n), z_(n)
     {
+        // wypełnienie macierzy wartościami
         for (int i = 0; i < total_size_; ++i) {
             a_[i] = 1.0001 * i;
         }
@@ -27,7 +31,7 @@ public:
     
 
     // ---------------------------------------------------------------------
-    // sekwencyjnie row-major 
+    // sekwencyjnie, wierszowo
 
     void multiply_row_sequential() {
         for (int i = 0; i < n_; ++i) {
@@ -38,11 +42,11 @@ public:
         }
     }
 
-    // alternatywna wersja z std::transform_reduce
+    // alternatywna wersja z std::transform_reduce (c++ 17), execution::seq (c++ 17) - wykonanie sekwencyjne 
     void multiply_row_sequential_stdtransform() {
         for (int i = 0; i < n_; ++i) {
-            y_[i] = std::transform_reduce(
-                std::execution::unseq,
+            y_[i] = std::transform_reduce( // przejście po pętli i sumowanie
+                std::execution::seq,
                 a_.begin() + n_ * i,
                 a_.begin() + n_ * (i + 1),
                 x_.begin(),
@@ -51,10 +55,23 @@ public:
         }
     }
 
-    
-    // ---------------------------------------------------------------------
-    // sekwencyjnie column-major 
+    /*
 
+    std::transform_reduce(
+        std::execution::seq,   // sposób wykonania
+        pierwszy_zakres_początek,
+        pierwszy_zakres_koniec,
+        drugi_zakres_początek,
+        wartość_początkowa
+    );
+    
+    */
+
+
+    // ---------------------------------------------------------------------
+    // sekwencyjnie, kolumnowo
+
+    // nie można użyć transform_reduce bo zakresy są współdzielone
     void multiply_col_sequential() {
         std::fill(y_.begin(), y_.end(), 0.0);
         for (int j = 0; j < n_; ++j) {
@@ -66,7 +83,10 @@ public:
 
 
     // ---------------------------------------------------------------------
-    // równolegle row-major, dekompozycja wierszowa
+    // równolegle, dekompozycja wiersz-wiersz
+
+    // Każdy wątek przetwarza niezależnie jeden wiersz macierzy A.
+    // std::for_each z wykonaniem std::execution::par, co pozwala równolegle przetwarzać poszczególne wiersze bez jawnego zarządzania wątkami
     void mat_vec_row_row_decomp() {
         std::for_each(std::execution::par, y_.begin(), y_.end(),
             [&](double &yi) {
@@ -96,7 +116,7 @@ public:
 
 
     // ---------------------------------------------------------------------
-    // równolegle row-major, dekompozycja kolumnowa
+    // równolegle, dekompozycja wiersz-kolumna
 
     void mat_vec_row_col_decomp() {
         std::fill(y_.begin(), y_.end(), 0.0);
@@ -129,8 +149,9 @@ public:
     }
 
 
+
     // ---------------------------------------------------------------------
-    // równolegle column-major, dekompozycja wierszowa
+    // równolegle, dekompozycja kolumna-wiersz
 
     void mat_vec_col_row_decomp() {
         std::for_each(std::execution::par, y_.begin(), y_.end(),
@@ -146,7 +167,7 @@ public:
 
 
     // ---------------------------------------------------------------------
-    // równolegle column-major, dekompozycja kolumnowa
+    // równolegle, dekompozycja kolumna-kolumna
 
     void mat_vec_col_col_decomp() {
         std::fill(y_.begin(), y_.end(), 0.0);
@@ -190,7 +211,7 @@ public:
         std::chrono::duration<double> elapsed = t2 - t1;
 
         double ops = 2.0 * n_ * n_;
-        double bytes = 8.0 * n_ * n_;
+        double bytes = 8.0 * (n_ * n_ + 2.0 * n_);
         double gflops = ops / elapsed.count() * 1e-9;
         double gbs = bytes / elapsed.count() * 1e-9;
 
@@ -210,8 +231,8 @@ int main() {
 
     // g++ -std=c++20 -O3 matrix_vector_execution.cpp -ltbb -o mv_ex
 
-    const int N = 2000;
-    MatrixVector mv(N);
+    const int N = 2000; // rozmiar macierzy
+    MatrixVector mv(N); // obiekt klasy MatrixVector
 
     std::cout << "\nROW MAJOR:\n";
     mv.benchmark("Row-row decomposition", &MatrixVector::mat_vec_row_row_decomp);

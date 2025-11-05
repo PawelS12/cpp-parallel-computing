@@ -73,7 +73,9 @@ public:
 
 
 // ---------------------------------------------------------------------
-// Klasa AsyncIntegrator - obliczanie całki za pomocą std::async i std::future 
+// Klasa AsyncIntegrator - obliczanie całki za pomocą std::async i std::future
+// System sam decyduje, czy uruchomić nowe wątki, czy wykorzystać istniejące.
+// Nie ma ręcznego zarządzania pulą 
 
 class AsyncIntegrator : public BaseIntegrator {
 public:
@@ -127,7 +129,7 @@ public:
         std::atomic<int> task_index{0}; // zmienna atomowa, licznik podzadań
 
         // funkcja anonimowa lambda wykonywana przez każdy wątek
-        auto worker = [&]() {
+        auto compute_subintervals = [&]() {
             while (true) {
                 // pobranie indeksu podzadania
                 int idx = task_index.fetch_add(1);
@@ -148,7 +150,7 @@ public:
         {
             std::vector<std::jthread> threads;
             for (int i = 0; i < threads_number_; ++i) {
-                threads.emplace_back(worker);
+                threads.emplace_back(compute_subintervals);
             }
         }
 
@@ -160,30 +162,31 @@ public:
 
 // ---------------------------------------------------------------------
 // Klasa ThreadPool - własna implementacja puli wątków
-// istnieje gotowa implementacja np w bibliotece boost, ale nie jest to oficjalna część języka c++
+// twprzona jest określona liczba wątków, które cały czas działają i pobierają zadania z kolejki
+// istnieje gotowa implementacja np. w zewnętrznej bibliotece boost, ale nie jest to oficjalna część języka c++
 
 class ThreadPool {
 private:
-    std::vector<std::jthread> workers_; // vector wątków
+    std::vector<std::jthread> threads_; // vector wątków
     std::queue<std::function<void()>> tasks_; // kolejka zadań dla wątków
     std::mutex mutex_; // mutex do synchronizacji kolejki
     std::condition_variable cv_; // zmienna warunkowa do powiadamiania o dostepnych zadaniacj
-    bool stop_ = false; // flaga do zatrzymywania puli wątków
+    bool flag_stop_ = false; // flaga do zatrzymywania puli wątków
 
 public:
-    ThreadPool(int threads) {
-        for (int i = 0; i < threads; ++i) {
-            workers_.emplace_back([this] {
+    ThreadPool(int threads_number) {
+        for (int i = 0; i < threads_number; ++i) {
+            threads_.emplace_back([this] {
                 while (true) {
                     std::function<void()> task;
 
                     // sekcja krytyczna
                     {
                         std::unique_lock lock(mutex_);
-                        cv_.wait(lock, [this]{ return stop_ || !tasks_.empty(); });
+                        cv_.wait(lock, [this]{ return flag_stop_ || !tasks_.empty(); });
 
                         // jesli brak zadań oraz flaga = true, wątek kończy działanie
-                        if (stop_ && tasks_.empty()) {
+                        if (flag_stop_ && tasks_.empty()) {
                             return;
                         }
 
@@ -203,7 +206,7 @@ public:
     ~ThreadPool() {
         {
             std::scoped_lock lock(mutex_);
-            stop_ = true; // ustawienie flagi zatrzymania
+            flag_stop_ = true; // ustawienie flagi zatrzymania
         }
 
         cv_.notify_all(); // powiadomienie wątków aby zakończyły działanie
@@ -211,12 +214,14 @@ public:
 
     // submit() dodaje nowe zadanie do kolejki
     template<typename F>
-    auto submit(F&& f) -> std::future<decltype(f())> {
-        using R = decltype(f()); // typ zwracany przez funkcję
+    // F&& - forwarding reference, przyjmuje funkcje lub lambde
+    // std::future<decltype(f())> - typ zwracany przez funkcje, inny rodzaj zapisu używany przy szablonach
+    auto submit(F&& f) -> std::future<decltype(f())> { 
+        using R = decltype(f()); // typ zwracany przez funkcję f()
 
-        // std::packaged_task, aby można było pobrać wyniki
+        //wskaźnik do packaged_task w kopii shared_ptr, aby bezpiecznie przekazać go między wątkami.
         auto task_ptr = std::make_shared<std::packaged_task<R()>>(std::forward<F>(f));
-        std::future<R> res = task_ptr->get_future(); // stworzenie obiektu future
+        std::future<R> result = task_ptr->get_future(); // stworzenie obiektu future
 
         {
             std::scoped_lock lock(mutex_); 
@@ -228,7 +233,8 @@ public:
         }
 
         cv_.notify_one(); // powiadomienie pojedynczego wątku o nowym zadaniu 
-        return res;       
+
+        return result;       
     }
 };
 
@@ -253,7 +259,7 @@ public:
         for (int i = 0; i < tasks_number_; ++i) {
             double sub_xp = xp_ + i * sub_interval;
             double sub_xk = sub_xp + sub_interval;
-            
+
             IntegralTask task(sub_xp, sub_xk, dx_);
             futures.push_back(pool.submit(task));
         }
@@ -271,15 +277,13 @@ class Benchmark {
 public:
     // funkcja szablonowa, przyjmuje dowolny typ
     template<typename F>
-
-    // metoda static - nie trzeba tworzyć obiektu klasy
-    static double measure(F&& func, const std::string& label) {
+    static double measure(F&& func, const std::string& name) { // metoda static - nie trzeba tworzyć obiektu klasy
         auto start = std::chrono::high_resolution_clock::now(); // zegar wysokiej rozdzielczości
         double result = func();
         auto end = std::chrono::high_resolution_clock::now();
 
         double duration = std::chrono::duration<double>(end - start).count();
-        std::cout << std::format("{}: {} (Time: {} s)\n", label, result, duration);
+        std::cout << std::format("{}: {} (Time: {} s)\n", name, result, duration);
 
         return duration;
     }

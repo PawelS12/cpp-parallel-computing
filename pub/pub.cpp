@@ -105,9 +105,9 @@ public:
     // porównanie ilości kufli po symulacji z ilością przed symulacją
     void verify_and_close_pub(int initial_mugs_number, int final_mugs_number) {    
         if (final_mugs_number == initial_mugs_number) {
-            log(std::format("\nSUCCESS: All mugs returned properly! Start: {}, End: {}.\n", initial_mugs_number, final_mugs_number));
+            log(std::format("\nAll mugs returned properly! Start: {}, End: {}.\n", initial_mugs_number, final_mugs_number));
         } else {
-            log(std::format("\nERROR: Mug count mismatch! Start: {}, End: {}\n", initial_mugs_number, final_mugs_number));
+            log(std::format("\nMug count mismatch! Start: {}, End: {}\n", initial_mugs_number, final_mugs_number));
         }
     }
 
