@@ -9,18 +9,17 @@
 
 class MatrixVector {
 private:
-    int n_; // rozmiar macierzy 
-    int total_size_; // liczba elementów macierzy
-    std::vector<double> a_; // wektor macierzy
-    std::vector<double> x_; // wektor wejściowy
-    std::vector<double> y_; // wektor wynikowy
-    std::vector<double> z_; // wektor do wyników
+    int n_; 
+    int total_size_; 
+    std::vector<double> a_; 
+    std::vector<double> x_; 
+    std::vector<double> y_; 
+    std::vector<double> z_; 
 
 public:
     explicit MatrixVector(int n)
         : n_(n), total_size_(n * n), a_(total_size_), x_(n), y_(n), z_(n)
     {
-        // wypełnienie macierzy wartościami
         for (int i = 0; i < total_size_; ++i) {
             a_[i] = 1.0001 * i;
         }
@@ -28,24 +27,19 @@ public:
             x_[i] = static_cast<double>(n_ - i);
         }
     }
-    
-
-    // ---------------------------------------------------------------------
-    // sekwencyjnie, wierszowo
 
     void multiply_row_sequential() {
+        std::fill(y_.begin(), y_.end(), 0.0);
         for (int i = 0; i < n_; ++i) {
-            y_[i] = 0.0;
             for (int j = 0; j < n_; ++j) {
                 y_[i] += a_[n_ * i + j] * x_[j];
             }
         }
     }
 
-    // alternatywna wersja z std::transform_reduce (c++ 17), execution::seq (c++ 17) - wykonanie sekwencyjne 
     void multiply_row_sequential_stdtransform() {
         for (int i = 0; i < n_; ++i) {
-            y_[i] = std::transform_reduce( // przejście po pętli i sumowanie
+            y_[i] = std::transform_reduce( 
                 std::execution::seq,
                 a_.begin() + n_ * i,
                 a_.begin() + n_ * (i + 1),
@@ -55,23 +49,6 @@ public:
         }
     }
 
-    /*
-
-    std::transform_reduce(
-        std::execution::seq,   // sposób wykonania
-        pierwszy_zakres_początek,
-        pierwszy_zakres_koniec,
-        drugi_zakres_początek,
-        wartość_początkowa
-    );
-    
-    */
-
-
-    // ---------------------------------------------------------------------
-    // sekwencyjnie, kolumnowo
-
-    // nie można użyć transform_reduce bo zakresy są współdzielone
     void multiply_col_sequential() {
         std::fill(y_.begin(), y_.end(), 0.0);
         for (int j = 0; j < n_; ++j) {
@@ -81,12 +58,6 @@ public:
         }
     }
 
-
-    // ---------------------------------------------------------------------
-    // równolegle, dekompozycja wiersz-wiersz
-
-    // Każdy wątek przetwarza niezależnie jeden wiersz macierzy A.
-    // std::for_each z wykonaniem std::execution::par, co pozwala równolegle przetwarzać poszczególne wiersze bez jawnego zarządzania wątkami
     void mat_vec_row_row_decomp() {
         std::for_each(std::execution::par, y_.begin(), y_.end(),
             [&](double &yi) {
@@ -99,13 +70,12 @@ public:
             });
     }
 
-    // alternatywna wersja z std::transform_reduce
     void mat_vec_row_row_decomp_stdtransform() {
         std::for_each(std::execution::par, std::begin(y_), std::end(y_),
             [&](double &yi) {
                 int i = static_cast<int>(&yi - &y_[0]);
                 yi = std::transform_reduce(
-                    std::execution::unseq,
+                    std::execution::par_unseq,
                     a_.begin() + n_ * i,
                     a_.begin() + n_ * (i + 1),
                     x_.begin(),
@@ -114,73 +84,97 @@ public:
             });
     }
 
-
-    // ---------------------------------------------------------------------
-    // równolegle, dekompozycja wiersz-kolumna
-
-    void mat_vec_row_col_decomp() {
+    void mat_vec_row_col_jthread() {
         std::fill(y_.begin(), y_.end(), 0.0);
+        int num_threads = std::thread::hardware_concurrency();
+        std::vector<std::jthread> threads;
+        std::vector<std::vector<double>> local_results(num_threads, std::vector<double>(n_, 0.0));
+        
+        int cols_per_thread = (n_ + num_threads - 1) / num_threads;
 
-        std::for_each(std::execution::par, y_.begin(), y_.end(),
-            [&](double &yi) {
-                int i = &yi - &y_[0];
-                double sum = 0.0;
-                for (int j = 0; j < n_; ++j) {
-                    sum += a_[n_ * i + j] * x_[j];
+        for (int t = 0; t < num_threads; ++t) {
+            int start_col = t * cols_per_thread;
+            int end_col = std::min(start_col + cols_per_thread, n_);
+            int thread_id = t;
+
+            threads.emplace_back([=, &local_results, this](std::stop_token){
+                std::vector<double>& y_local = local_results[thread_id];
+                for (int j = start_col; j < end_col; ++j) {
+                    for (int i = 0; i < n_; ++i) {
+                        y_local[i] += a_[n_ * i + j] * x_[j];
+                    }
                 }
-                yi = sum;
             });
+        }
+
+        for (auto& th : threads) th.join();
+
+        for (int i = 0; i < n_; ++i) {
+            for (int t = 0; t < num_threads; ++t) {
+                y_[i] += local_results[t][i];
+            }
+        }
     }
 
-    // alternatywna wersja z std::transform_reduce
-    void mat_vec_row_col_decomp_stdtransform() {
-        std::fill(y_.begin(), y_.end(), 0.0);
-        std::for_each(std::execution::par, std::begin(y_), std::end(y_),
-            [&](double &yi) {
-                int i = static_cast<int>(&yi - &y_[0]);
-                yi = std::transform_reduce(
-                    std::execution::unseq,
-                    a_.begin() + n_ * i,
-                    a_.begin() + n_ * (i + 1),
-                    x_.begin(),
-                    0.0
-                );
-            });
-    }
-
-
-
-    // ---------------------------------------------------------------------
-    // równolegle, dekompozycja kolumna-wiersz
-
-    void mat_vec_col_row_decomp() {
-        std::for_each(std::execution::par, y_.begin(), y_.end(),
-            [&](double &yi) {
-                int i = &yi - &y_[0];
-                double sum = 0.0;
-                for (int j = 0; j < n_; ++j) {
-                    sum += a_[i + j * n_] * x_[j];
-                }
-                yi = sum;
-            });
-    }
-
-
-    // ---------------------------------------------------------------------
-    // równolegle, dekompozycja kolumna-kolumna
-
-    void mat_vec_col_col_decomp() {
+    void mat_vec_col_row_block_jthread() {
+        int block_size = 64;
         std::fill(y_.begin(), y_.end(), 0.0);
 
-        std::for_each(std::execution::par, y_.begin(), y_.end(),
-            [&](double &yi) {
-                int i = &yi - &y_[0];
-                double sum = 0.0;
-                for (int j = 0; j < n_; ++j) {
-                    sum += a_[i + j * n_] * x_[j];
+        int num_threads = std::thread::hardware_concurrency();
+        std::vector<std::jthread> threads;
+        std::vector<std::vector<double>> local_results(num_threads, std::vector<double>(n_, 0.0));
+
+        int rows_per_thread = (n_ + num_threads - 1) / num_threads;
+
+        for (int t = 0; t < num_threads; ++t) {
+            int start_row = t * rows_per_thread;
+            int end_row = std::min(start_row + rows_per_thread, n_);
+            int thread_id = t; 
+
+            threads.emplace_back([=, &local_results, this](std::stop_token){
+                std::vector<double> &y_local = local_results[thread_id];
+                for (int col_block = 0; col_block < n_; col_block += block_size) {
+                    int end_col = std::min(col_block + block_size, n_);
+                    for (int j = col_block; j < end_col; ++j)
+                        for (int i = start_row; i < end_row; ++i)
+                            y_local[i] += a_[i + j*n_] * x_[j];
                 }
-                yi = sum;
             });
+        }
+
+        for (auto &th : threads) th.join(); 
+
+        for (int i = 0; i < n_; ++i)
+            for (int t = 0; t < num_threads; ++t)
+                y_[i] += local_results[t][i];
+    }
+
+    void mat_vec_col_col_jthread() {
+        std::fill(y_.begin(), y_.end(), 0.0);
+
+        int num_threads = std::thread::hardware_concurrency();
+        std::vector<std::jthread> threads;
+        std::vector<std::vector<double>> local_results(num_threads, std::vector<double>(n_, 0.0));
+        int cols_per_thread = (n_ + num_threads - 1) / num_threads;
+
+        for (int t = 0; t < num_threads; ++t) {
+            int start_col = t * cols_per_thread;
+            int end_col = std::min(start_col + cols_per_thread, n_);
+            int thread_id = t;
+
+            threads.emplace_back([=, &local_results, this](std::stop_token){
+                std::vector<double> &y_local = local_results[thread_id];
+                for (int j = start_col; j < end_col; ++j)
+                    for (int i = 0; i < n_; ++i)
+                        y_local[i] += a_[i + j*n_] * x_[j];
+            });
+        }
+
+        for (auto &th : threads) th.join();
+
+        for (int i = 0; i < n_; ++i)
+            for (int t = 0; t < num_threads; ++t)
+                y_[i] += local_results[t][i];
     }
 
 
@@ -202,20 +196,29 @@ public:
         return true;
     }
 
-    void benchmark(const std::string& name, void (MatrixVector::*func)(), bool column_major_ref = false) {
+    void benchmark(const std::string& name, void (MatrixVector::*func)(), bool column_major_ref = false, int repetitions = 10) {
         set_reference(column_major_ref);
 
-        auto t1 = std::chrono::high_resolution_clock::now();
-        (this->*func)();
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = t2 - t1;
+        double total_time = 0.0;
+
+        for (int i = 0; i < repetitions; ++i) {
+            std::fill(y_.begin(), y_.end(), 0.0); 
+            auto t1 = std::chrono::high_resolution_clock::now();
+            (this->*func)();
+            auto t2 = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed = t2 - t1;
+            total_time += elapsed.count();
+        }
+
+        double avg_time = total_time / repetitions;
 
         double ops = 2.0 * n_ * n_;
         double bytes = 8.0 * (n_ * n_ + 2.0 * n_);
-        double gflops = ops / elapsed.count() * 1e-9;
-        double gbs = bytes / elapsed.count() * 1e-9;
+        double gflops = ops / avg_time * 1e-9;
+        double gbs = bytes / avg_time * 1e-9;
 
-        std::cout << std::format("{} | time: {:.6f} s | {:.6f} GFLOP/s | {:.6f} GB/s ", name, elapsed.count(), gflops, gbs);
+        std::cout << std::format("{} | avg time: {:.6f} s | {:.6f} GFLOP/s | {:.6f} GB/s ", 
+                                name, avg_time, gflops, gbs);
 
         if (!check_result()) {
             std::cout << " benchmark- wrong result";
@@ -229,22 +232,23 @@ public:
 
 int main() {
 
-    // g++ -std=c++20 -O3 matrix_vector_execution.cpp -ltbb -o mv_ex
+    const int N = 15000; 
+    MatrixVector mv(N); 
 
-    const int N = 2000; // rozmiar macierzy
-    MatrixVector mv(N); // obiekt klasy MatrixVector
+    std::cout << "\n--- CZAS SEKWENCYJNY ---\n";
+    mv.benchmark("Row major sequential", &MatrixVector::multiply_row_sequential);
+    mv.benchmark("Col major sequential", &MatrixVector::multiply_col_sequential, true);
 
     std::cout << "\nROW MAJOR:\n";
     mv.benchmark("Row-row decomposition", &MatrixVector::mat_vec_row_row_decomp);
-    mv.benchmark("Row-col decomposition", &MatrixVector::mat_vec_row_col_decomp);
+    mv.benchmark("Row-col decomposition", &MatrixVector::mat_vec_row_col_jthread);
 
     std::cout << "\nROW MAJOR (std::transform_reduce):\n";
     mv.benchmark("Row-row decomposition (std::transform)", &MatrixVector::mat_vec_row_row_decomp_stdtransform);
-    mv.benchmark("Row-col decomposition (std::transform)", &MatrixVector::mat_vec_row_col_decomp_stdtransform);
 
     std::cout << "\nCOLUMN MAJOR:\n";
-    mv.benchmark("Col-col decomposition", &MatrixVector::mat_vec_col_col_decomp, true);
-    mv.benchmark("Col-row decomposition", &MatrixVector::mat_vec_col_row_decomp, true);
+    mv.benchmark("Col-row decomposition", &MatrixVector::mat_vec_col_row_block_jthread, true);
+    mv.benchmark("Col-col decomposition", &MatrixVector::mat_vec_col_col_jthread, true);
 
     return 0;
 }
